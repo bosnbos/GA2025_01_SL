@@ -14,8 +14,8 @@ This project culminates in a **20-minute group presentation**, highlighting key 
 | Full Name          | Student ID  | GitHub Username |
 |--------------------|-------------|------------------|
 | Noah Bos           | s2400393    | bosnbos          |
-| Andre Blokland     | s1234568    | bob-dev          |
-| Carla F            | s1234569    | carolgit         |
+| Andre Blokland     | sxxxxxxx    | andreblokland1   |
+| Carla F            | sxxxxxxx    | xxxxxxxx         |
 
 
 
