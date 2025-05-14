@@ -2,29 +2,163 @@
 title: "NB_Logistic"
 author: "Bos Noah"
 date: "`r Sys.Date()`"
-output: pdf_document
+output: github_document
+
 ---
 
-# Logistic
-- suitable for linear relations
-
-i think Ridge/Lasso/relaxed lasso could  work well because some predictors seems to have a weak effect on *CLASS* and we have a moderate amount of predictors (k = 58). Lasso could introduce some bias because of the regularization but its reduction in variance could improve the predictive performance in the test set. It could be a good benchmark against the more flexible models like Random forest. A lambda optimized for variable selection will likely not be optimal for prediction therefore i use also try relaxed lasso, to refit a OLS on selected predictors only and compute relaxed lasso coefficients as a weighted sum of OLS and LASSO coefficients. 
-
-Logistic regression could work well but i tmight be poor at prediction becaseut there are many correlated predictors. It can also overfit with too many variables.
-Ridge regression 
-
 ```{r train test split}
-df = read.csv('spambase.csv')
+df = read.csv('spambase.csv', check.names = F)
 idx = sample(1:nrow(df),size = 0.7*nrow(df), replace = F)
 
 train = df[idx,]
 test = df[-idx,]
 ```
 
+# Lasso, ridge or relaxed lassso?
+
+Given that some predictors appear to have weak effects on *CLASS* and the number of predictors is moderate (k = 58), regularized models like Ridge, Lasso, and Elastic Net are good choices. Standard logistic regression is not viable in this setting due to the high-dimensional structure, which can lead to perfect separation—a scenario where a hyperplane classifies the training data perfectly, preventing the model from converging (see below). Lasso may introduce bias through shrinkage, but its variance reduction can improve test-set performance. Relaxed Lasso is also used to refit an OLS model on selected variables, reducing bias while maintaining sparsity.
+
+- **Logistic regression** is a reasonable baseline, but it can perform poorly when predictors are highly correlated or when the number of variables is large. In such cases, it may overfit or fail to converge due to perfect separation.
+- **Ridge regression** is better suited to datasets with many correlated predictors. It retains all variables but shrinks their coefficients, reducing overfitting and potentially improving predictive accuracy.
+- **Lasso regression** performs automatic feature selection by shrinking some coefficients to zero. It is most effective when we believe that only a subset of variables truly contributes to the outcome, making it ideal for building sparse, interpretable models.
+- **Relaxed Lasso** may be preferred when Lasso is too aggressive. After selecting variables, it reduces bias by partially refitting coefficients, often improving generalization without sacrificing sparsity.
 
 
 
+```{r}
+hist(cor(df), breaks = 20)
+```
+- slight multicollinearity come correlations are quite large
 
-# random forest 
-- good for prediction accuracy
-- allows for interactions
+```{r standard logistic regression}
+library(caret)
+cv_ctrl = trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = twoClassSummary)
+df$spam = factor(df$Class, levels = c(0,1), label = c('not_spam', "spam"))
+
+
+cv_logistic = train(
+  spam ~ ., data = df[idx,],
+  method = "glm",
+  family = "binomial",
+  trControl = cv_ctrl,
+  metric = "ROC",
+  preProcess = c("center", "scale", "zv")
+)
+```
+
+Model found a hyperplane that separates the classes perfectly, coefs go to ± infinity. common in text data with word frequencies. Too many predictors Logistic regression overfits or cant solve the likelihood equation. Perfect is simply more likely with higher dimensions
+
+```{r data prep}
+library(glmnet)
+X = as.matrix(subset(df, select = -Class))
+y = df$Class
+```
+
+```{r lasso}
+# Lasso (alpha = 1)
+cv_lasso <- cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 1)
+plot(cv_lasso)
+cv_lasso
+```
+Plot does not have convex cure for the CV error. The minumum CV binomial deviance yields a model of 62. Lambda 1 SE criterion suggest sparser solution of 44 predictors which we use.
+
+```{r ridge}
+# Ridge (alpha = 0)
+cv_ridge <- cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 0)
+plot(cv_ridge)
+cv_ridge
+```
+Ridge, as expected, selects all predictor variables. The two criteria yield a different value of lambda.
+interesting to check the distribution of the coefficients. The plot suggests that no penalization might work well ( lambda = 0).
+
+```{r}
+hist(coef(cv_ridge)[,1], breaks = 58, main = 'Distribution ridge coeficients \n most coef are 0, some are quite strong ',)
+```
+Most coef are around 0 while some coefs are quite strong.
+
+```{r elastic net}
+# Elastic Net (alpha = 0.5)
+cv_elastic <- cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 0.5)
+plot(cv_elastic)
+cv_elastic
+```
+```{r relaxed lasso}
+#relaxed lasso
+cv_relaxed = cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 1, relax = T)
+plot(cv_relaxed)
+cv_relaxed
+```
+
+
+# Model evaluation
+
+```{r Test prediction}
+l_preds = predict(cv_lasso, s = "lambda.min", newx = X[-idx,], type = 'response')
+r_preds = predict(cv_ridge, s = "lambda.min", newx = X[-idx,], type = 'response')
+e_preds = predict(cv_elastic, s = "lambda.min", newx = X[-idx,], type = 'response')
+x_preds = predict(cv_relaxed, newx = X[-idx, ], s = "lambda.min", type = "response")
+```
+
+```{r probs to class labels}
+l_class = ifelse(l_preds > 0.5, 1, 0)
+r_class = ifelse(r_preds > 0.5, 1, 0)
+e_class = ifelse(e_preds > 0.5, 1, 0)
+x_class = ifelse(e_preds > 0.5, 1, 0)
+```
+
+```{r confusion matrix and accuracy}
+library(caret)
+print('---lasso----')
+confusionMatrix(factor(l_class), factor(y[-idx]), positive = "1")  # Lasso
+print('---ridge----')
+confusionMatrix(factor(r_class), factor(y[-idx]), positive = "1")  # Ridge
+print('---Elastic net----')
+confusionMatrix(factor(e_class), factor(y[-idx]), positive = "1")  # Elastic Net
+print('---relaxed lasso----')
+confusionMatrix(factor(x_class), factor(y[-idx]), positive = "1")  # relaxed lasso
+```
+
+```{r AUC}
+library(pROC)
+
+l_auc <- auc(roc(y[-idx], as.numeric(l_preds)))
+r_auc <- auc(roc(y[-idx], as.numeric(r_preds)))
+e_auc <- auc(roc(y[-idx], as.numeric(e_preds)))
+x_auc <- auc(roc(y[-idx], as.numeric(x_preds)))
+print(c(Lasso = l_auc, Ridge = r_auc, ElasticNet = e_auc, Relaxed_Lasso = x_auc))
+```
+```{r roc curves}
+roc_l <- roc(y[-idx], as.numeric(l_preds))
+roc_r <- roc(y[-idx], as.numeric(r_preds))
+roc_e <- roc(y[-idx], as.numeric(e_preds))
+roc_x <- roc(y[-idx], as.numeric(x_preds))
+
+plot(roc_l, col = "blue", legacy.axes = TRUE, main = "ROC Curves for Lasso, Ridge, Elastic Net")
+plot(roc_r, col = "red", add = TRUE)
+plot(roc_e, col = "green", add = TRUE)
+plot(roc_x, col = "black", add = TRUE)
+
+legend("bottomright", legend = c(
+  paste0("Lasso (AUC = ", round(auc(roc_l), 2), ")"),
+  paste0("Ridge (AUC = ", round(auc(roc_r), 2), ")"),
+  paste0("Elastic Net (AUC = ", round(auc(roc_e), 2), ")"),
+  paste0("Relaxed lasso (AUC = ", round(auc(roc_x), 2), ")")
+), col = c("blue", "red", "green", 'black'), lwd = 2)
+```
+
+```{r results}
+results <- data.frame(
+  Model = c("Lasso", "Ridge", "Elastic Net", 'Relaxed Lasso'),
+  AUC = c(l_auc, r_auc, e_auc, x_auc),
+  Accuracy = c(
+    mean(l_class == y[-idx]),
+    mean(r_class == y[-idx]),
+    mean(e_class == y[-idx]),
+    mean(x_class == y[-idx])
+  )
+)
+
+print(results)
+```
+*Among the four models evaluated, Relaxed Lasso achieved the highest AUC (0.973) while maintaining strong accuracy (91.89%), suggesting it balances variable selection and coefficient stability effectively. Lasso also performed well, with slightly lower AUC (0.962) but the highest accuracy (92.11%). Ridge lagged behind slightly in both metrics, indicating less effective feature selection. Elastic Net offered a middle ground between Ridge and Lasso. Overall, Relaxed Lasso provides the best trade-off between predictive power and generalization, making it the most robust choice for this classification task. Regularization clearly improves performance over standard logistic regression.**
+
