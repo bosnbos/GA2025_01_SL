@@ -3,14 +3,6 @@ NB_Logistic
 Bos Noah
 2025-05-14
 
-``` r
-df = read.csv('spambase.csv', check.names = F)
-idx = sample(1:nrow(df),size = 0.7*nrow(df), replace = F)
-
-train = df[idx,]
-test = df[-idx,]
-```
-
 # Lasso, ridge or relaxed lassso?
 
 Given that some predictors appear to have weak effects on *CLASS* and
@@ -40,103 +32,34 @@ bias while maintaining sparsity.
   coefficients, often improving generalization without sacrificing
   sparsity.
 
-``` r
-hist(cor(df), breaks = 20)
-```
+![](NB_logistic_files/figure-gfm/unnamed-chunk-1-1.png)<!-- -->
 
-![](NB_logistic_files/figure-gfm/unnamed-chunk-1-1.png)<!-- --> - slight
-multicollinearity come correlations are quite large
+- **slight multicollinearity. some correlations are quite large**
 
 ``` r
-library(caret)
+#library(caret)
+#cv_ctrl = trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = twoClassSummary)
+#df$spam = factor(df$Class, levels = c(0,1), label = c('not_spam', "spam"))
+
+
+#cv_logistic = train(
+#  spam ~ ., data = df[idx,],
+#  method = "glm",
+#  family = "binomial",
+#  trControl = cv_ctrl,
+#  metric = "ROC",
+#  preProcess = c("center", "scale", "zv")
+#)
 ```
 
-    ## Loading required package: ggplot2
-
-    ## Loading required package: lattice
-
-``` r
-cv_ctrl = trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = twoClassSummary)
-df$spam = factor(df$Class, levels = c(0,1), label = c('not_spam', "spam"))
-
-
-cv_logistic = train(
-  spam ~ ., data = df[idx,],
-  method = "glm",
-  family = "binomial",
-  trControl = cv_ctrl,
-  metric = "ROC",
-  preProcess = c("center", "scale", "zv")
-)
-```
-
-    ## Warning: glm.fit: algorithm did not converge
-    ## Warning: glm.fit: algorithm did not converge
-    ## Warning: glm.fit: algorithm did not converge
-    ## Warning: glm.fit: algorithm did not converge
-    ## Warning: glm.fit: algorithm did not converge
-    ## Warning: glm.fit: algorithm did not converge
-    ## Warning: glm.fit: algorithm did not converge
-    ## Warning: glm.fit: algorithm did not converge
-    ## Warning: glm.fit: algorithm did not converge
-    ## Warning: glm.fit: algorithm did not converge
-    ## Warning: glm.fit: algorithm did not converge
-
-Model found a hyperplane that separates the classes perfectly, coefs go
-to ± infinity. common in text data with word frequencies. Too many
+**Model found a hyperplane that separates the classes perfectly, coefs
+go to ± infinity. common in text data with word frequencies. Too many
 predictors Logistic regression overfits or cant solve the likelihood
-equation. Perfect is simply more likely with higher dimensions
+equation. Perfect is simply more likely with higher dimensions**
 
-``` r
-library(glmnet)
-```
-
-    ## Loading required package: Matrix
-
-    ## Loaded glmnet 4.1-8
-
-``` r
-X = as.matrix(subset(df, select = -Class))
-y = df$Class
-```
-
-``` r
-# Lasso (alpha = 1)
-cv_lasso <- cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 1)
-```
-
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-
-``` r
-plot(cv_lasso)
-```
+## LASSO Regression
 
 ![](NB_logistic_files/figure-gfm/lasso-1.png)<!-- -->
-
-``` r
-cv_lasso
-```
 
     ## 
     ## Call:  cv.glmnet(x = X[idx, ], y = y[idx], family = "binomial", alpha = 1) 
@@ -144,50 +67,17 @@ cv_lasso
     ## Measure: Binomial Deviance 
     ## 
     ##       Lambda Index Measure      SE Nonzero
-    ## min 0.000398    67  0.4620 0.03808      53
-    ## 1se 0.003382    44  0.4989 0.03406      49
+    ## min 0.000233    73  0.4489 0.02269      56
+    ## 1se 0.002617    47  0.4697 0.01959      52
 
-Plot does not have convex cure for the CV error. The minumum CV binomial
-deviance yields a model of 62. Lambda 1 SE criterion suggest sparser
-solution of 44 predictors which we use.
+This Lasso model performed best at a lambda of 0.00023, using 56
+predictors. A slightly simpler model with 52 predictors (1-SE rule) had
+only a small drop in performance, suggesting good accuracy with fewer
+variables.
 
-``` r
-# Ridge (alpha = 0)
-cv_ridge <- cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 0)
-```
-
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-
-``` r
-plot(cv_ridge)
-```
+## Ridge Regression
 
 ![](NB_logistic_files/figure-gfm/ridge-1.png)<!-- -->
-
-``` r
-cv_ridge
-```
 
     ## 
     ## Call:  cv.glmnet(x = X[idx, ], y = y[idx], family = "binomial", alpha = 0) 
@@ -195,912 +85,230 @@ cv_ridge
     ## Measure: Binomial Deviance 
     ## 
     ##      Lambda Index Measure      SE Nonzero
-    ## min 0.01847   100  0.5334 0.01611      57
-    ## 1se 0.02442    97  0.5466 0.01575      57
+    ## min 0.01890   100  0.5217 0.01874      57
+    ## 1se 0.02498    97  0.5358 0.01857      57
 
-Ridge, as expected, selects all predictor variables. The two criteria
-yield a different value of lambda. interesting to check the distribution
-of the coefficients. The plot suggests that no penalization might work
-well ( lambda = 0).
+This Ridge model achieved its best performance at $\lambda$ = 0.0189
+with all 57 predictors. A slightly more regularized model (1-SE rule)
+also used all predictors and had only a small increase in deviance,
+indicating that regularization helps stabilize the model without
+reducing the number of features.
 
-``` r
-hist(coef(cv_ridge)[,1], breaks = 58, main = 'Distribution ridge coeficients \n most coef are 0, some are quite strong ',)
-```
+![](NB_logistic_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
 
-![](NB_logistic_files/figure-gfm/unnamed-chunk-2-1.png)<!-- --> Most
-coef are around 0 while some coefs are quite strong.
+This histogram shows the distribution of Ridge regression coefficients.
+Unlike Lasso, Ridge does not set coefficients exactly to zero, but
+shrinks them toward zero. Most coefficients are small, clustered around
+zero, indicating weak predictors, while a few have larger absolute
+values, suggesting stronger influence on the outcome.
 
-``` r
-# Elastic Net (alpha = 0.5)
-cv_elastic <- cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 0.5)
-```
-
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-
-``` r
-plot(cv_elastic)
-```
+## Elastic Net
 
 ![](NB_logistic_files/figure-gfm/elastic%20net-1.png)<!-- -->
-
-``` r
-cv_elastic
-```
 
     ## 
     ## Call:  cv.glmnet(x = X[idx, ], y = y[idx], family = "binomial", alpha = 0.5) 
     ## 
     ## Measure: Binomial Deviance 
     ## 
-    ##       Lambda Index Measure      SE Nonzero
-    ## min 0.000345    76  0.4724 0.02306      56
-    ## 1se 0.003213    52  0.4932 0.02490      54
+    ##        Lambda Index Measure      SE Nonzero
+    ## min 0.0003212    77  0.4490 0.02117      57
+    ## 1se 0.0027293    54  0.4681 0.02015      53
 
-``` r
-#relaxed lasso
-cv_relaxed = cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 1, relax = T)
-```
+This Elastic Net model ($\alpha = 0.5$) performed best at $\lambda$ =
+0.00032 using all 57 predictors. A more regularized model selected by
+the 1-SE rule used 53 predictors with only a small drop in performance,
+indicating a good balance between accuracy and model simplicity.
 
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-    ## Warning in storage.mode(xd) <- "double": NAs introduced by coercion
-
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-
-``` r
-plot(cv_relaxed)
-```
+## Relaxed lasso
 
 ![](NB_logistic_files/figure-gfm/relaxed%20lasso-1.png)<!-- -->
 
-``` r
-cv_relaxed
-```
-
     ## 
-    ## Call:  cv.glmnet(x = X[idx, ], y = y[idx], relax = T, family = "binomial",      alpha = 1) 
+    ## Call:  cv.glmnet(x = X[idx, ], y = y[idx], relax = T, family = "binomial",      alpha = 1, lambda.min.ratio = 0.001) 
     ## 
     ## Measure: Binomial Deviance 
     ## 
     ##     Gamma Index   Lambda Index Measure      SE Nonzero
-    ## min  0.50     3 0.005385    39  0.4397 0.02646      43
-    ## 1se  0.25     2 0.026185    22  0.4627 0.02321      27
+    ## min   0.5     3 0.002173    65  0.4337 0.01647      52
+    ## 1se   0.0     1 0.014296    38  0.4491 0.01514      34
+
+This Relaxed Lasso model achieved its lowest binomial deviance (0.4571)
+with $\gamma$ = 1 (equivalent to standard Lasso), $\lambda$ = 0.000366,
+and 53 active predictors. Using the 1-SE rule, a more relaxed model
+($\gamma$ = 0.25) with $\lambda$ = 0.0151 selects only 35 predictors and
+maintains strong performance (deviance = 0.4721), offering improved
+sparsity and potentially better generalization.
+
+This Relaxed Lasso model, using a higher minimum lambda, achieved its
+best performance with $\gamma$ = 0.5 and $\lambda$ = 0.00217, reaching
+the lowest deviance (0.434) with 52 predictors. The 1-SE rule selects a
+simpler model ($\gamma$ = 0, $\lambda$ = 0.0143) with 34 predictors and
+slightly higher deviance (0.449), offering better sparsity with minimal
+loss in accuracy.
 
 # Model evaluation
 
-``` r
-l_preds = predict(cv_lasso, s = "lambda.min", newx = X[-idx,], type = 'response')
-```
+First predicted all models using the test data. Then converted the
+probabilities to class labels using a 0.5 threshold. Calculated
+confusion matrices to get accuracies, false positives and negatives.
+Than AUC values to compare the performance across different cutoff
+values.
 
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
+## Confusion matrices
 
-``` r
-r_preds = predict(cv_ridge, s = "lambda.min", newx = X[-idx,], type = 'response')
-```
-
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-
-``` r
-e_preds = predict(cv_elastic, s = "lambda.min", newx = X[-idx,], type = 'response')
-```
-
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-
-``` r
-x_preds = predict(cv_relaxed, newx = X[-idx, ], s = "lambda.min", type = "response")
-```
-
-    ## Warning in cbind2(1, newx) %*% nbeta: NAs introduced by coercion
-
-``` r
-l_class = ifelse(l_preds > 0.5, 1, 0)
-r_class = ifelse(r_preds > 0.5, 1, 0)
-e_class = ifelse(e_preds > 0.5, 1, 0)
-x_class = ifelse(e_preds > 0.5, 1, 0)
-```
-
-``` r
-library(caret)
-print('---lasso----')
-```
-
-    ## [1] "---lasso----"
-
-``` r
-confusionMatrix(factor(l_class), factor(y[-idx]), positive = "1")  # Lasso
-```
+using 0.5 cutoff
 
     ## Confusion Matrix and Statistics
     ## 
     ##           Reference
     ## Prediction   0   1
-    ##          0 801  70
-    ##          1  35 475
-    ##                                           
-    ##                Accuracy : 0.924           
-    ##                  95% CI : (0.9087, 0.9374)
-    ##     No Information Rate : 0.6054          
-    ##     P-Value [Acc > NIR] : < 2.2e-16       
-    ##                                           
-    ##                   Kappa : 0.8391          
-    ##                                           
-    ##  Mcnemar's Test P-Value : 0.0009064       
-    ##                                           
-    ##             Sensitivity : 0.8716          
-    ##             Specificity : 0.9581          
-    ##          Pos Pred Value : 0.9314          
-    ##          Neg Pred Value : 0.9196          
-    ##              Prevalence : 0.3946          
-    ##          Detection Rate : 0.3440          
-    ##    Detection Prevalence : 0.3693          
-    ##       Balanced Accuracy : 0.9148          
-    ##                                           
-    ##        'Positive' Class : 1               
+    ##          0 792  59
+    ##          1  52 478
+    ##                                          
+    ##                Accuracy : 0.9196         
+    ##                  95% CI : (0.904, 0.9334)
+    ##     No Information Rate : 0.6112         
+    ##     P-Value [Acc > NIR] : <2e-16         
+    ##                                          
+    ##                   Kappa : 0.8305         
+    ##                                          
+    ##  Mcnemar's Test P-Value : 0.569          
+    ##                                          
+    ##             Sensitivity : 0.8901         
+    ##             Specificity : 0.9384         
+    ##          Pos Pred Value : 0.9019         
+    ##          Neg Pred Value : 0.9307         
+    ##              Prevalence : 0.3888         
+    ##          Detection Rate : 0.3461         
+    ##    Detection Prevalence : 0.3838         
+    ##       Balanced Accuracy : 0.9143         
+    ##                                          
+    ##        'Positive' Class : 1              
     ## 
-
-``` r
-print('---ridge----')
-```
-
-    ## [1] "---ridge----"
-
-``` r
-confusionMatrix(factor(r_class), factor(y[-idx]), positive = "1")  # Ridge
-```
 
     ## Confusion Matrix and Statistics
     ## 
     ##           Reference
     ## Prediction   0   1
-    ##          0 801  97
-    ##          1  35 448
+    ##          0 799  87
+    ##          1  45 450
     ##                                           
     ##                Accuracy : 0.9044          
     ##                  95% CI : (0.8877, 0.9194)
-    ##     No Information Rate : 0.6054          
-    ##     P-Value [Acc > NIR] : < 2e-16         
+    ##     No Information Rate : 0.6112          
+    ##     P-Value [Acc > NIR] : < 2.2e-16       
     ##                                           
-    ##                   Kappa : 0.7959          
+    ##                   Kappa : 0.796           
     ##                                           
-    ##  Mcnemar's Test P-Value : 1.1e-07         
+    ##  Mcnemar's Test P-Value : 0.0003589       
     ##                                           
-    ##             Sensitivity : 0.8220          
-    ##             Specificity : 0.9581          
-    ##          Pos Pred Value : 0.9275          
-    ##          Neg Pred Value : 0.8920          
-    ##              Prevalence : 0.3946          
-    ##          Detection Rate : 0.3244          
-    ##    Detection Prevalence : 0.3497          
-    ##       Balanced Accuracy : 0.8901          
+    ##             Sensitivity : 0.8380          
+    ##             Specificity : 0.9467          
+    ##          Pos Pred Value : 0.9091          
+    ##          Neg Pred Value : 0.9018          
+    ##              Prevalence : 0.3888          
+    ##          Detection Rate : 0.3259          
+    ##    Detection Prevalence : 0.3584          
+    ##       Balanced Accuracy : 0.8923          
     ##                                           
     ##        'Positive' Class : 1               
     ## 
-
-``` r
-print('---Elastic net----')
-```
-
-    ## [1] "---Elastic net----"
-
-``` r
-confusionMatrix(factor(e_class), factor(y[-idx]), positive = "1")  # Elastic Net
-```
 
     ## Confusion Matrix and Statistics
     ## 
     ##           Reference
     ## Prediction   0   1
-    ##          0 803  73
-    ##          1  33 472
+    ##          0 794  63
+    ##          1  50 474
     ##                                           
-    ##                Accuracy : 0.9232          
-    ##                  95% CI : (0.9079, 0.9367)
-    ##     No Information Rate : 0.6054          
-    ##     P-Value [Acc > NIR] : < 2.2e-16       
+    ##                Accuracy : 0.9182          
+    ##                  95% CI : (0.9025, 0.9321)
+    ##     No Information Rate : 0.6112          
+    ##     P-Value [Acc > NIR] : <2e-16          
     ##                                           
-    ##                   Kappa : 0.8373          
+    ##                   Kappa : 0.8271          
     ##                                           
-    ##  Mcnemar's Test P-Value : 0.0001519       
+    ##  Mcnemar's Test P-Value : 0.259           
     ##                                           
-    ##             Sensitivity : 0.8661          
-    ##             Specificity : 0.9605          
-    ##          Pos Pred Value : 0.9347          
-    ##          Neg Pred Value : 0.9167          
-    ##              Prevalence : 0.3946          
-    ##          Detection Rate : 0.3418          
-    ##    Detection Prevalence : 0.3657          
-    ##       Balanced Accuracy : 0.9133          
+    ##             Sensitivity : 0.8827          
+    ##             Specificity : 0.9408          
+    ##          Pos Pred Value : 0.9046          
+    ##          Neg Pred Value : 0.9265          
+    ##              Prevalence : 0.3888          
+    ##          Detection Rate : 0.3432          
+    ##    Detection Prevalence : 0.3794          
+    ##       Balanced Accuracy : 0.9117          
     ##                                           
     ##        'Positive' Class : 1               
     ## 
-
-``` r
-print('---relaxed lasso----')
-```
-
-    ## [1] "---relaxed lasso----"
-
-``` r
-confusionMatrix(factor(x_class), factor(y[-idx]), positive = "1")  # relaxed lasso
-```
 
     ## Confusion Matrix and Statistics
     ## 
     ##           Reference
     ## Prediction   0   1
-    ##          0 803  73
-    ##          1  33 472
+    ##          0 794  63
+    ##          1  50 474
     ##                                           
-    ##                Accuracy : 0.9232          
-    ##                  95% CI : (0.9079, 0.9367)
-    ##     No Information Rate : 0.6054          
-    ##     P-Value [Acc > NIR] : < 2.2e-16       
+    ##                Accuracy : 0.9182          
+    ##                  95% CI : (0.9025, 0.9321)
+    ##     No Information Rate : 0.6112          
+    ##     P-Value [Acc > NIR] : <2e-16          
     ##                                           
-    ##                   Kappa : 0.8373          
+    ##                   Kappa : 0.8271          
     ##                                           
-    ##  Mcnemar's Test P-Value : 0.0001519       
+    ##  Mcnemar's Test P-Value : 0.259           
     ##                                           
-    ##             Sensitivity : 0.8661          
-    ##             Specificity : 0.9605          
-    ##          Pos Pred Value : 0.9347          
-    ##          Neg Pred Value : 0.9167          
-    ##              Prevalence : 0.3946          
-    ##          Detection Rate : 0.3418          
-    ##    Detection Prevalence : 0.3657          
-    ##       Balanced Accuracy : 0.9133          
+    ##             Sensitivity : 0.8827          
+    ##             Specificity : 0.9408          
+    ##          Pos Pred Value : 0.9046          
+    ##          Neg Pred Value : 0.9265          
+    ##              Prevalence : 0.3888          
+    ##          Detection Rate : 0.3432          
+    ##    Detection Prevalence : 0.3794          
+    ##       Balanced Accuracy : 0.9117          
     ##                                           
     ##        'Positive' Class : 1               
     ## 
 
-``` r
-library(pROC)
-```
-
-    ## Type 'citation("pROC")' for a citation.
-
-    ## 
-    ## Attaching package: 'pROC'
-
-    ## The following objects are masked from 'package:stats':
-    ## 
-    ##     cov, smooth, var
-
-``` r
-l_auc <- auc(roc(y[-idx], as.numeric(l_preds)))
-```
-
-    ## Setting levels: control = 0, case = 1
-
-    ## Setting direction: controls < cases
-
-``` r
-r_auc <- auc(roc(y[-idx], as.numeric(r_preds)))
-```
-
-    ## Setting levels: control = 0, case = 1
-    ## Setting direction: controls < cases
-
-``` r
-e_auc <- auc(roc(y[-idx], as.numeric(e_preds)))
-```
-
-    ## Setting levels: control = 0, case = 1
-    ## Setting direction: controls < cases
-
-``` r
-x_auc <- auc(roc(y[-idx], as.numeric(x_preds)))
-```
-
-    ## Setting levels: control = 0, case = 1
-    ## Setting direction: controls < cases
-
-``` r
-print(c(Lasso = l_auc, Ridge = r_auc, ElasticNet = e_auc, Relaxed_Lasso = x_auc))
-```
+## AUC
 
     ##         Lasso         Ridge    ElasticNet Relaxed_Lasso 
-    ##     0.9714718     0.9637834     0.9709934     0.9718954
+    ##     0.9684905     0.9577166     0.9673851     0.9695451
 
-``` r
-roc_l <- roc(y[-idx], as.numeric(l_preds))
-```
+These AUC results show that all four models perform well, with AUCs
+above 0.95. Relaxed Lasso outperforms the others, achieving the highest
+AUC (0.973), suggesting it best balances variable selection and
+predictive accuracy. Lasso, Ridge, and Elastic Net perform comparably
+($\approx 0.96$), but Relaxed Lasso offers a modest improvement in
+discriminative power.
 
-    ## Setting levels: control = 0, case = 1
-
-    ## Setting direction: controls < cases
-
-``` r
-roc_r <- roc(y[-idx], as.numeric(r_preds))
-```
-
-    ## Setting levels: control = 0, case = 1
-    ## Setting direction: controls < cases
-
-``` r
-roc_e <- roc(y[-idx], as.numeric(e_preds))
-```
-
-    ## Setting levels: control = 0, case = 1
-    ## Setting direction: controls < cases
-
-``` r
-roc_x <- roc(y[-idx], as.numeric(x_preds))
-```
-
-    ## Setting levels: control = 0, case = 1
-    ## Setting direction: controls < cases
-
-``` r
-plot(roc_l, col = "blue", legacy.axes = TRUE, main = "ROC Curves for Lasso, Ridge, Elastic Net")
-plot(roc_r, col = "red", add = TRUE)
-plot(roc_e, col = "green", add = TRUE)
-plot(roc_x, col = "black", add = TRUE)
-
-legend("bottomright", legend = c(
-  paste0("Lasso (AUC = ", round(auc(roc_l), 2), ")"),
-  paste0("Ridge (AUC = ", round(auc(roc_r), 2), ")"),
-  paste0("Elastic Net (AUC = ", round(auc(roc_e), 2), ")"),
-  paste0("Relaxed lasso (AUC = ", round(auc(roc_x), 2), ")")
-), col = c("blue", "red", "green", 'black'), lwd = 2)
-```
+## ROC curves
 
 ![](NB_logistic_files/figure-gfm/roc%20curves-1.png)<!-- -->
 
-``` r
-results <- data.frame(
-  Model = c("Lasso", "Ridge", "Elastic Net", 'Relaxed Lasso'),
-  AUC = c(l_auc, r_auc, e_auc, x_auc),
-  Accuracy = c(
-    mean(l_class == y[-idx]),
-    mean(r_class == y[-idx]),
-    mean(e_class == y[-idx]),
-    mean(x_class == y[-idx])
-  )
-)
-
-print(results)
-```
+The ROC curves show that all models—Lasso, Ridge, Elastic Net, and
+Relaxed Lasso—achieve excellent classification performance, with AUC
+values around 0.96–0.97. The curves closely overlap, indicating similar
+sensitivity-specificity trade-offs, though Relaxed Lasso slightly
+outperforms others, confirming its strong discriminative power in this
+high-dimensional setting.
 
     ##           Model       AUC  Accuracy
-    ## 1         Lasso 0.9714718 0.9239681
-    ## 2         Ridge 0.9637834 0.9044171
-    ## 3   Elastic Net 0.9709934 0.9232440
-    ## 4 Relaxed Lasso 0.9718954 0.9232440
+    ## 1         Lasso 0.9684905 0.9196235
+    ## 2         Ridge 0.9577166 0.9044171
+    ## 3   Elastic Net 0.9673851 0.9181752
+    ## 4 Relaxed Lasso 0.9695451 0.9181752
 
-\*Among the four models evaluated, Relaxed Lasso achieved the highest
-AUC (0.973) while maintaining strong accuracy (91.89%), suggesting it
-balances variable selection and coefficient stability effectively. Lasso
-also performed well, with slightly lower AUC (0.962) but the highest
-accuracy (92.11%). Ridge lagged behind slightly in both metrics,
-indicating less effective feature selection. Elastic Net offered a
-middle ground between Ridge and Lasso. Overall, Relaxed Lasso provides
-the best trade-off between predictive power and generalization, making
-it the most robust choice for this classification task. Regularization
-clearly improves performance over standard logistic regression.\*\*
+**Results**
+
+Among the four models evaluated, Relaxed Lasso achieved the highest AUC
+(0.970) with strong accuracy (91.82%), indicating it effectively
+balances variable selection and predictive stability. Lasso slightly
+outperformed in accuracy (91.96%) and had a nearly equal AUC (0.968),
+demonstrating excellent classification performance. Elastic Net closely
+followed, with an AUC of 0.967 and accuracy of 91.82%, showing a strong
+compromise between Ridge and Lasso. Ridge regression performed slightly
+worse, with an AUC of 0.958 and accuracy of 90.44%, suggesting less
+effective control over correlated predictors. Overall, Relaxed Lasso
+remains the most robust and interpretable model in this setting.

@@ -6,11 +6,18 @@ output: github_document
 
 ---
 
-```{r train test split}
+
+```{r packages, message=F, warning=F, echo=FALSE}
+library(pROC)
+library(caret)
+library(glmnet)
+library(dplyr)
+```
+
+```{r train test split, echo=F}
 set.seed(4500393)
 df = read.csv('spambase.csv')
 idx = sample(1:nrow(df),size = 0.7*nrow(df), replace = F)
-
 ```
 
 # Lasso, ridge or relaxed lassso?
@@ -24,11 +31,11 @@ Given that some predictors appear to have weak effects on *CLASS* and the number
 
 
 
-```{r}
-hist(cor(df), breaks = 58, xlim = c(-0.5, 0.9))
+```{r, echo=FALSE}
+hist(cor(df), breaks = 500, xlim = c(-0.5, 0.9), main = 'Histogram of correlation coefs', xlab = '')
 ```
 
-- slight multicollinearity come correlations are quite large
+- **slight multicollinearity. some correlations are quite large**
 
 ```{r standard logistic regression, eval=FALSE, }
 #library(caret)
@@ -46,91 +53,110 @@ hist(cor(df), breaks = 58, xlim = c(-0.5, 0.9))
 #)
 ```
 
-Model found a hyperplane that separates the classes perfectly, coefs go to ± infinity. common in text data with word frequencies. Too many predictors Logistic regression overfits or cant solve the likelihood equation. Perfect is simply more likely with higher dimensions
+**Model found a hyperplane that separates the classes perfectly, coefs go to ± infinity. common in text data with word frequencies. Too many predictors Logistic regression overfits or cant solve the likelihood equation. Perfect is simply more likely with higher dimensions**
 
-```{r data prep}
-library(glmnet)
+```{r data prep, echo=F}
 X = as.matrix(subset(df, select = -Class))
 y = as.matrix(df$Class)
-
-
 ```
 
-```{r lasso}
-# Lasso (alpha = 1)
+## LASSO Regression
+
+```{r lasso, echo=F}
+set.seed(4500393)
 cv_lasso <- cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 1)
 plot(cv_lasso)
 cv_lasso
 ```
-Plot does not have convex cure for the CV error. The minumum CV binomial deviance yields a model of 62. Lambda 1 SE criterion suggest sparser solution of 44 predictors which we use.
 
-```{r ridge}
-# Ridge (alpha = 0)
+This Lasso model performed best at a lambda of 0.00023, using 56 predictors. A slightly simpler model with 52 predictors (1-SE rule) had only a small drop in performance, suggesting good accuracy with fewer variables.
+
+## Ridge Regression
+
+```{r ridge, echo=F}
+set.seed(4500393)
 cv_ridge = cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 0)
 plot(cv_ridge)
 cv_ridge
 ```
-Ridge, as expected, selects all predictor variables. The cross-validated Ridge regression ($\alpha =0$) achieved minimum binomial deviance of 0.5229 at $\lambda$ = 0.01811, using all 57 predictors. The 1-SE rule suggests a slightly larger $\lambda$ (0.02394) with comparable performance (deviance = 0.5354), offering a more regularized, stable model without variable elimination.sa
 
-```{r}
+This Ridge model achieved its best performance at $\lambda$ = 0.0189 with all 57 predictors. A slightly more regularized model (1-SE rule) also used all predictors and had only a small increase in deviance, indicating that regularization helps stabilize the model without reducing the number of features.
+
+```{r, echo=F}
 hist(coef(cv_ridge)[,1], breaks = 58, main = 'Distribution ridge coeficients \n most coef are 0, some are quite strong ',)
 ```
 
 This histogram shows the distribution of Ridge regression coefficients. Unlike Lasso, Ridge does not set coefficients exactly to zero, but shrinks them toward zero. Most coefficients are small, clustered around zero, indicating weak predictors, while a few have larger absolute values, suggesting stronger influence on the outcome.
 
-```{r elastic net}
+## Elastic Net
+```{r elastic net, echo=F}
 # Elastic Net (alpha = 0.5)
+set.seed(4500393)
 cv_elastic = cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 0.5)
 plot(cv_elastic)
 cv_elastic
 ```
-This Elastic Net model ($\alpha = 0.5$ ) achieved its lowest binomial deviance (0.4589) at $\lambda$ = 0.00059 with 56 nonzero coefficients. The 1-SE rule favors a more regularized model at $\lambda$ = 0.00287, slightly increasing deviance to 0.4751 and reducing the model to 54 predictors, improving generalization with minimal loss in fit.
 
-```{r relaxed lasso}
-#relaxed lasso
-cv_relaxed = cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 1, relax = T)
+This Elastic Net model ($\alpha = 0.5$) performed best at $\lambda$ = 0.00032 using all 57 predictors. A more regularized model selected by the 1-SE rule used 53 predictors with only a small drop in performance, indicating a good balance between accuracy and model simplicity.
+
+## Relaxed lasso
+
+```{r relaxed lasso, echo=F, warning=F}
+set.seed(4500)
+cv_relaxed = cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 1, relax = T, lambda.min.ratio = 1e-3)
 plot(cv_relaxed)
 cv_relaxed
 ```
 
 This Relaxed Lasso model achieved its lowest binomial deviance (0.4571) with $\gamma$ = 1 (equivalent to standard Lasso), $\lambda$ = 0.000366, and 53 active predictors. Using the 1-SE rule, a more relaxed model ($\gamma$ = 0.25) with $\lambda$ = 0.0151 selects only 35 predictors and maintains strong performance (deviance = 0.4721), offering improved sparsity and potentially better generalization.
 
+
+This Relaxed Lasso model, using a higher minimum lambda, achieved its best performance with $\gamma$ = 0.5 and $\lambda$ = 0.00217, reaching the lowest deviance (0.434) with 52 predictors. The 1-SE rule selects a simpler model ($\gamma$ = 0, $\lambda$ = 0.0143) with 34 predictors and slightly higher deviance (0.449), offering better sparsity with minimal loss in accuracy.
+
 # Model evaluation
 
-```{r Test prediction}
+First predicted all models using the test data. Then converted the probabilities to class labels using a 0.5 threshold. Calculated confusion matrices to get accuracies, false positives and negatives. Than AUC values to compare the performance across different cutoff values.
+
+```{r Test prediction, echo=F}
 l_preds = predict(cv_lasso, s = "lambda.min", newx = X[-idx,], type = 'response')
 r_preds = predict(cv_ridge, s = "lambda.min", newx = X[-idx,], type = 'response')
 e_preds = predict(cv_elastic, s = "lambda.min", newx = X[-idx,], type = 'response')
 x_preds = predict(cv_relaxed, newx = X[-idx, ], s = "lambda.min", type = "response")
 ```
 
-```{r probs to class labels}
+```{r probs to class labels, echo=F}
 l_class = ifelse(l_preds > 0.5, 1, 0)
 r_class = ifelse(r_preds > 0.5, 1, 0)
 e_class = ifelse(e_preds > 0.5, 1, 0)
 x_class = ifelse(e_preds > 0.5, 1, 0)
 ```
 
-```{r confusion matrix and accuracy}
-library(caret)
+## Confusion matrices
+
+using 0.5 cutoff
+
+```{r confusion matrix and accuracy, echo=FALSE}
 confusionMatrix(factor(l_class), factor(y[-idx]), positive = "1")  # Lasso
 confusionMatrix(factor(r_class), factor(y[-idx]), positive = "1")  # Ridge
 confusionMatrix(factor(e_class), factor(y[-idx]), positive = "1")  # Elastic Net
 confusionMatrix(factor(x_class), factor(y[-idx]), positive = "1")  # relaxed lasso
 ```
 
-```{r AUC, warning=FALSE, message=FALSE}
-library(pROC)
+## AUC
 
+```{r AUC, warning=FALSE, message=FALSE, echo= F}
 l_auc <- auc(roc(y[-idx], as.numeric(l_preds)))
 r_auc <- auc(roc(y[-idx], as.numeric(r_preds)))
 e_auc <- auc(roc(y[-idx], as.numeric(e_preds)))
 x_auc <- auc(roc(y[-idx], as.numeric(x_preds)))
 print(c(Lasso = l_auc, Ridge = r_auc, ElasticNet = e_auc, Relaxed_Lasso = x_auc))
 ```
+
 These AUC results show that all four models perform well, with AUCs above 0.95. Relaxed Lasso outperforms the others, achieving the highest AUC (0.973), suggesting it best balances variable selection and predictive accuracy. Lasso, Ridge, and Elastic Net perform comparably ($\approx 0.96$), but Relaxed Lasso offers a modest improvement in discriminative power.
 
-```{r roc curves, warning=FALSE, message=FALSE}
+## ROC curves
+
+```{r roc curves, warning=FALSE, message=FALSE, echo=F}
 roc_l <- roc(y[-idx], as.numeric(l_preds))
 roc_r <- roc(y[-idx], as.numeric(r_preds))
 roc_e <- roc(y[-idx], as.numeric(e_preds))
@@ -149,8 +175,9 @@ legend("bottomright", legend = c(
 ), col = c("blue", "red", "green", 'black'), lwd = 2)
 ```
 
+The ROC curves show that all models—Lasso, Ridge, Elastic Net, and Relaxed Lasso—achieve excellent classification performance, with AUC values around 0.96–0.97. The curves closely overlap, indicating similar sensitivity-specificity trade-offs, though Relaxed Lasso slightly outperforms others, confirming its strong discriminative power in this high-dimensional setting.
 
-```{r results}
+```{r results, echo=FALSE}
 results <- data.frame(
   Model = c("Lasso", "Ridge", "Elastic Net", 'Relaxed Lasso'),
   AUC = c(l_auc, r_auc, e_auc, x_auc),
@@ -164,8 +191,10 @@ results <- data.frame(
 
 print(results)
 ```
+
 **Results**
-Among the four models evaluated, Relaxed Lasso achieved the highest AUC (0.973) while maintaining strong accuracy (91.02%), suggesting it balances variable selection and coefficient stability effectively. Lasso also performed well, with a slightly lower AUC (0.962) and the highest accuracy (91.24%). Ridge lagged behind slightly in both metrics (AUC = 0.960, accuracy = 90.22%), indicating less effective regularization. Elastic Net offered a middle ground between Ridge and Lasso in both AUC (0.961) and accuracy (91.02%). Overall, Relaxed Lasso provides the best trade-off between predictive power and generalization, making it the most robust choice for this classification task.
+
+Among the four models evaluated, Relaxed Lasso achieved the highest AUC (0.970) with strong accuracy (91.82%), indicating it effectively balances variable selection and predictive stability. Lasso slightly outperformed in accuracy (91.96%) and had a nearly equal AUC (0.968), demonstrating excellent classification performance. Elastic Net closely followed, with an AUC of 0.967 and accuracy of 91.82%, showing a strong compromise between Ridge and Lasso. Ridge regression performed slightly worse, with an AUC of 0.958 and accuracy of 90.44%, suggesting less effective control over correlated predictors. Overall, Relaxed Lasso remains the most robust and interpretable model in this setting.
 
 
 
