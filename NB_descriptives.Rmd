@@ -1,0 +1,80 @@
+---
+title: "Spam_group_project"
+author: "Bos Noah"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+
+```{r}
+df = read.csv('spambase.csv')
+
+```
+
+# summary statistics
+- mean, sd min, max, na
+- No NA
+- 
+
+
+```{r}
+sapply(df, function(x) c(mean = mean(x, na.rm=TRUE),
+                         sd = sd(x, na.rm=TRUE),
+                         min = min(x, na.rm=TRUE),
+                         max = max(x, na.rm=TRUE),
+                         na = sum(is.na(x))))
+```
+
+```{r, fig.width=10, fig.high = 10}
+cor_matrix = cor(df)
+heatmap(cor_matrix, scale = 'column')
+```
+- Dendograms at the top and right show hieracrical lustering. Maybe 2/3 big clusteres can be seen. After that not clear pattern
+- Check the CLASS variable (our outcome). It is moderately correlated with some of the variables, and some not.
+
+# Would PCA be relevant
+```{r}
+library(EFAtools)
+N_FACTORS(df, criteria = c('PARALLEL', 'SCREE', 'EKC', 'KGC'), method = 'ML', eigen_type_other = 'PCA' )
+```
+- 11 to 15 factors are suitable. Which is quite large 
+
+
+# distribution of predictors
+
+- boxplots show quite some skewness
+- most of the emails contain words 0 times, some emails contain a lot of them. 
+```{r}
+boxplot(df[,1:(ncol(df)-1)])
+```
+
+```{r, fig.width=15, fig.height=10}
+library(ggplot2)
+library(reshape2)
+df_long <- melt(df)
+ggplot(df_long, aes(x = value)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  facet_wrap(~ variable, scales = "free") +
+  theme_minimal()
+```
+
+- more clearly shown here, in most emails 0 words are used in other emails the words get used more often. 
+- in text data like emails, the majority of words appear infrequently.
+- So: most values are near zero, and a few emails have very high frequencies of certain words.
+- Certain words (e.g. “free”, “money”) appear very often in spam and rarely in normal emails, exaggerating skewness in those features.
+```{r}
+library(dplyr)
+library('paran')
+df_subset = df |>
+  select(-Class)
+
+paran(df_subset, iterations = 5000, graph = T)
+```
+# CHECKING PCA WITH 15 FACTORS
+- not used yet
+```{r}
+library(psych)
+pca_rotated = principal(df_subset, nfactors = 15, rotate = "varimax", scores = TRUE)
+print(pca_rotated, digits = 2, cut = 0.3)
+```
+
