@@ -10,7 +10,6 @@ output: github_document
 set.seed(4500393)
 df = read.csv('spambase.csv', check.names = F)
 idx = sample(1:nrow(df),size = 0.7*nrow(df), replace = F)
-str(df)
 ```
 
 # Lasso, ridge or relaxed lassso?
@@ -25,11 +24,12 @@ Given that some predictors appear to have weak effects on *CLASS* and the number
 
 
 ```{r}
-hist(cor(df), breaks = 20)
+hist(cor(df), breaks = 58, xlim = c(-0.5, 0.9))
 ```
+
 - slight multicollinearity come correlations are quite large
 
-```{r standard logistic regression}
+```{r standard logistic regression, eval=FALSE}
 library(caret)
 cv_ctrl = trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = twoClassSummary)
 df$spam = factor(df$Class, levels = c(0,1), label = c('not_spam', "spam"))
@@ -53,7 +53,6 @@ X = as.matrix(subset(df, select = -Class))
 X = apply(X, 2, as.numeric)
 X = as.matrix(X)
 y = df$Class
-
 ```
 
 ```{r lasso}
