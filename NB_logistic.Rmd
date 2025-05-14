@@ -8,8 +8,9 @@ output: github_document
 
 ```{r train test split}
 set.seed(4500393)
-df = read.csv('spambase.csv', check.names = F)
+df = read.csv('spambase.csv')
 idx = sample(1:nrow(df),size = 0.7*nrow(df), replace = F)
+
 ```
 
 # Lasso, ridge or relaxed lassso?
@@ -29,20 +30,20 @@ hist(cor(df), breaks = 58, xlim = c(-0.5, 0.9))
 
 - slight multicollinearity come correlations are quite large
 
-```{r standard logistic regression, eval=FALSE}
-library(caret)
-cv_ctrl = trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = twoClassSummary)
-df$spam = factor(df$Class, levels = c(0,1), label = c('not_spam', "spam"))
+```{r standard logistic regression, eval=FALSE, }
+#library(caret)
+#cv_ctrl = trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = twoClassSummary)
+#df$spam = factor(df$Class, levels = c(0,1), label = c('not_spam', "spam"))
 
 
-cv_logistic = train(
-  spam ~ ., data = df[idx,],
-  method = "glm",
-  family = "binomial",
-  trControl = cv_ctrl,
-  metric = "ROC",
-  preProcess = c("center", "scale", "zv")
-)
+#cv_logistic = train(
+#  spam ~ ., data = df[idx,],
+#  method = "glm",
+#  family = "binomial",
+#  trControl = cv_ctrl,
+#  metric = "ROC",
+#  preProcess = c("center", "scale", "zv")
+#)
 ```
 
 Model found a hyperplane that separates the classes perfectly, coefs go to ± infinity. common in text data with word frequencies. Too many predictors Logistic regression overfits or cant solve the likelihood equation. Perfect is simply more likely with higher dimensions
@@ -50,9 +51,9 @@ Model found a hyperplane that separates the classes perfectly, coefs go to ± in
 ```{r data prep}
 library(glmnet)
 X = as.matrix(subset(df, select = -Class))
-X = apply(X, 2, as.numeric)
-X = as.matrix(X)
-y = df$Class
+y = as.matrix(df$Class)
+
+
 ```
 
 ```{r lasso}
