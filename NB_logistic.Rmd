@@ -7,11 +7,10 @@ output: github_document
 ---
 
 ```{r train test split}
+set.seed(4500393)
 df = read.csv('spambase.csv', check.names = F)
 idx = sample(1:nrow(df),size = 0.7*nrow(df), replace = F)
-
-train = df[idx,]
-test = df[-idx,]
+str(df)
 ```
 
 # Lasso, ridge or relaxed lassso?
@@ -51,7 +50,10 @@ Model found a hyperplane that separates the classes perfectly, coefs go to ± in
 ```{r data prep}
 library(glmnet)
 X = as.matrix(subset(df, select = -Class))
+X = apply(X, 2, as.numeric)
+X = as.matrix(X)
 y = df$Class
+
 ```
 
 ```{r lasso}
@@ -64,24 +66,26 @@ Plot does not have convex cure for the CV error. The minumum CV binomial devianc
 
 ```{r ridge}
 # Ridge (alpha = 0)
-cv_ridge <- cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 0)
+cv_ridge = cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 0)
 plot(cv_ridge)
 cv_ridge
 ```
-Ridge, as expected, selects all predictor variables. The two criteria yield a different value of lambda.
-interesting to check the distribution of the coefficients. The plot suggests that no penalization might work well ( lambda = 0).
+Ridge, as expected, selects all predictor variables. The cross-validated Ridge regression ($\alpha =0$) achieved minimum binomial deviance of 0.5229 at $\lambda$ = 0.01811, using all 57 predictors. The 1-SE rule suggests a slightly larger $\lambda$ (0.02394) with comparable performance (deviance = 0.5354), offering a more regularized, stable model without variable elimination.sa
 
 ```{r}
 hist(coef(cv_ridge)[,1], breaks = 58, main = 'Distribution ridge coeficients \n most coef are 0, some are quite strong ',)
 ```
-Most coef are around 0 while some coefs are quite strong.
+
+This histogram shows the distribution of Ridge regression coefficients. Unlike Lasso, Ridge does not set coefficients exactly to zero, but shrinks them toward zero. Most coefficients are small, clustered around zero, indicating weak predictors, while a few have larger absolute values, suggesting stronger influence on the outcome.
 
 ```{r elastic net}
 # Elastic Net (alpha = 0.5)
-cv_elastic <- cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 0.5)
+cv_elastic = cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 0.5)
 plot(cv_elastic)
 cv_elastic
 ```
+This Elastic Net model ($\alpha = 0.5$ ) achieved its lowest binomial deviance (0.4589) at $\lambda$ = 0.00059 with 56 nonzero coefficients. The 1-SE rule favors a more regularized model at $\lambda$ = 0.00287, slightly increasing deviance to 0.4751 and reducing the model to 54 predictors, improving generalization with minimal loss in fit.
+
 ```{r relaxed lasso}
 #relaxed lasso
 cv_relaxed = cv.glmnet(X[idx,], y[idx], family = "binomial", alpha = 1, relax = T)
@@ -89,6 +93,7 @@ plot(cv_relaxed)
 cv_relaxed
 ```
 
+This Relaxed Lasso model achieved its lowest binomial deviance (0.4571) with $\gamma$ = 1 (equivalent to standard Lasso), $\lambda$ = 0.000366, and 53 active predictors. Using the 1-SE rule, a more relaxed model ($\gamma$ = 0.25) with $\lambda$ = 0.0151 selects only 35 predictors and maintains strong performance (deviance = 0.4721), offering improved sparsity and potentially better generalization.
 
 # Model evaluation
 
@@ -108,17 +113,13 @@ x_class = ifelse(e_preds > 0.5, 1, 0)
 
 ```{r confusion matrix and accuracy}
 library(caret)
-print('---lasso----')
 confusionMatrix(factor(l_class), factor(y[-idx]), positive = "1")  # Lasso
-print('---ridge----')
 confusionMatrix(factor(r_class), factor(y[-idx]), positive = "1")  # Ridge
-print('---Elastic net----')
 confusionMatrix(factor(e_class), factor(y[-idx]), positive = "1")  # Elastic Net
-print('---relaxed lasso----')
 confusionMatrix(factor(x_class), factor(y[-idx]), positive = "1")  # relaxed lasso
 ```
 
-```{r AUC}
+```{r AUC, warning=FALSE, message=FALSE}
 library(pROC)
 
 l_auc <- auc(roc(y[-idx], as.numeric(l_preds)))
@@ -127,7 +128,9 @@ e_auc <- auc(roc(y[-idx], as.numeric(e_preds)))
 x_auc <- auc(roc(y[-idx], as.numeric(x_preds)))
 print(c(Lasso = l_auc, Ridge = r_auc, ElasticNet = e_auc, Relaxed_Lasso = x_auc))
 ```
-```{r roc curves}
+These AUC results show that all four models perform well, with AUCs above 0.95. Relaxed Lasso outperforms the others, achieving the highest AUC (0.973), suggesting it best balances variable selection and predictive accuracy. Lasso, Ridge, and Elastic Net perform comparably ($\approx 0.96$), but Relaxed Lasso offers a modest improvement in discriminative power.
+
+```{r roc curves, warning=FALSE, message=FALSE}
 roc_l <- roc(y[-idx], as.numeric(l_preds))
 roc_r <- roc(y[-idx], as.numeric(r_preds))
 roc_e <- roc(y[-idx], as.numeric(e_preds))
@@ -146,6 +149,7 @@ legend("bottomright", legend = c(
 ), col = c("blue", "red", "green", 'black'), lwd = 2)
 ```
 
+
 ```{r results}
 results <- data.frame(
   Model = c("Lasso", "Ridge", "Elastic Net", 'Relaxed Lasso'),
@@ -160,5 +164,8 @@ results <- data.frame(
 
 print(results)
 ```
-*Among the four models evaluated, Relaxed Lasso achieved the highest AUC (0.973) while maintaining strong accuracy (91.89%), suggesting it balances variable selection and coefficient stability effectively. Lasso also performed well, with slightly lower AUC (0.962) but the highest accuracy (92.11%). Ridge lagged behind slightly in both metrics, indicating less effective feature selection. Elastic Net offered a middle ground between Ridge and Lasso. Overall, Relaxed Lasso provides the best trade-off between predictive power and generalization, making it the most robust choice for this classification task. Regularization clearly improves performance over standard logistic regression.**
+**Results**
+Among the four models evaluated, Relaxed Lasso achieved the highest AUC (0.973) while maintaining strong accuracy (91.02%), suggesting it balances variable selection and coefficient stability effectively. Lasso also performed well, with a slightly lower AUC (0.962) and the highest accuracy (91.24%). Ridge lagged behind slightly in both metrics (AUC = 0.960, accuracy = 90.22%), indicating less effective regularization. Elastic Net offered a middle ground between Ridge and Lasso in both AUC (0.961) and accuracy (91.02%). Overall, Relaxed Lasso provides the best trade-off between predictive power and generalization, making it the most robust choice for this classification task.
+
+
 
