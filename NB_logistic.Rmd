@@ -1,0 +1,30 @@
+---
+title: "NB_Logistic"
+author: "Bos Noah"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+# Logistic
+- suitable for linear relations
+
+i think Ridge/Lasso/relaxed lasso could  work well because some predictors seems to have a weak effect on *CLASS* and we have a moderate amount of predictors (k = 58). Lasso could introduce some bias because of the regularization but its reduction in variance could improve the predictive performance in the test set. It could be a good benchmark against the more flexible models like Random forest. A lambda optimized for variable selection will likely not be optimal for prediction therefore i use also try relaxed lasso, to refit a OLS on selected predictors only and compute relaxed lasso coefficients as a weighted sum of OLS and LASSO coefficients. 
+
+Logistic regression could work well but i tmight be poor at prediction becaseut there are many correlated predictors. It can also overfit with too many variables.
+Ridge regression 
+
+```{r train test split}
+df = read.csv('spambase.csv')
+idx = sample(1:nrow(df),size = 0.7*nrow(df), replace = F)
+
+train = df[idx,]
+test = df[-idx,]
+```
+
+
+
+
+
+# random forest 
+- good for prediction accuracy
+- allows for interactions
