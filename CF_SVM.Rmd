@@ -1,0 +1,125 @@
+---
+author: "Carla Flore"
+title: "SVM Classification on Spambase Dataset"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r load-packages, message=FALSE, warning=FALSE}
+# ---- Load packages ----
+library(caret)
+library(doParallel)
+```
+
+Below, we load the dataset and ensure that the response variable `Class` is encoded as a binary factor.
+
+```{r load-data}
+# ---- Set seed and load data ----
+set.seed(4500393)
+df <- read.csv("spambase.csv")
+df$Class <- as.factor(df$Class)  # Ensure binary factor
+```
+
+We split the dataset into 70% training and 30% testing data to evaluate generalization performance.
+
+```{r train-test-split}
+# ---- Train-test split (70/30) ----
+idx <- sample(1:nrow(df), size = 0.7 * nrow(df), replace = FALSE)
+train_raw <- df[idx, ]
+test_raw  <- df[-idx, ]
+```
+
+SVMs are sensitive to feature scales. We standardize predictors using the training set's mean and variance.
+
+```{r scale-predictors}
+# ---- Scale predictors ----
+x_train <- scale(train_raw[, -ncol(train_raw)])
+x_test  <- scale(test_raw[, -ncol(test_raw)],
+                 center = attr(x_train, "scaled:center"),
+                 scale = attr(x_train, "scaled:scale"))
+```
+
+We reattach the response variable to the scaled predictors for training and testing.
+
+```{r combine-data}
+# ---- Combine scaled predictors with target ----
+train_svm <- as.data.frame(x_train)
+train_svm$Class <- train_raw$Class
+
+test_svm <- as.data.frame(x_test)
+test_svm$Class <- test_raw$Class
+```
+
+We set up parallel processing to accelerate model tuning.
+
+```{r parallel-setup, message=FALSE}
+# ---- Setup parallel backend ----
+cl <- makePSOCKcluster(parallel::detectCores() - 1)
+registerDoParallel(cl)
+```
+
+We define the tuning grid for cost and gamma (sigma).
+
+```{r define-grid}
+# ---- Define tuning grid ----
+tune_grid <- expand.grid(
+  C = c(0.1, 1, 10),
+  sigma = c(0.01, 0.1, 1)
+)
+```
+
+The best hyperparameters are selected using 10-fold CV and parallel computation.
+
+```{r tune-model-parallel}
+# ---- Cross-validation tuning with caret + parallel ----
+set.seed(4500393)
+svm_tuned <- train(
+  Class ~ .,
+  data = train_svm,
+  method = "svmRadial",
+  trControl = trainControl(method = "cv", number = 10),
+  tuneGrid = tune_grid,
+  preProcess = NULL
+)
+```
+
+We stop the parallel backend.
+
+```{r stop-cluster}
+# ---- Stop cluster ----
+stopCluster(cl)
+registerDoSEQ()
+```
+
+We apply the trained model to the test set and compute performance metrics.
+
+```{r predict-evaluate-caret}
+# ---- Predict and evaluate on test set ----
+svm_pred <- predict(svm_tuned, newdata = test_svm)
+conf_matrix <- confusionMatrix(svm_pred, test_svm$Class)
+```
+
+Finally, we print the best parameters and the confusion matrix.
+
+```{r results}
+# ---- Print results ----
+print(svm_tuned$bestTune)
+print(conf_matrix)
+```
+
+The SVM classifier with a radial basis kernel, tuned using 10-fold cross-validation, achieved its best performance with `C = 10` and `sigma = 0.01`. The model showed excellent accuracy on the test set, achieving 93.6% accuracy. It also exhibited high sensitivity (94.7%) and specificity (91.9%), indicating balanced and robust performance in detecting both spam and non-spam emails. The Kappa value of 0.866 suggests strong agreement beyond chance, and the McNemar’s test showed no significant asymmetry in misclassification types. 
+```{r summary-table, echo=FALSE}
+# ---- Summary table of confusion matrix ----
+summary_table <- data.frame(
+  Metric = c("Accuracy", "95% CI (lower)", "95% CI (upper)", "Kappa", "Sensitivity",
+             "Specificity", "Pos Pred Value", "Neg Pred Value", "Balanced Accuracy"),
+  Value = c(0.9363, 0.9221, 0.9486, 0.866, 0.9467, 0.9199, 0.9489, 0.9165, 0.9333)
+)
+
+knitr::kable(summary_table, digits = 4, caption = "Summary of SVM Model Performance on Test Set")
+```
+
+```{r plot-tuning-results, fig.height=4.5, fig.width=6}
+# ---- Visualize tuning results ----
+plot(svm_tuned)
+```
