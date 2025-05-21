@@ -1,0 +1,328 @@
+---
+title: "Spam_group_project"
+author: "Bos Noah"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+
+```{r}
+df = read.csv('spambase.csv')
+
+```
+
+# summary statistics
+- mean, sd min, max, na
+- No NA
+- 
+
+
+```{r}
+sapply(df, function(x) c(mean = mean(x, na.rm=TRUE),
+                         sd = sd(x, na.rm=TRUE),
+                         min = min(x, na.rm=TRUE),
+                         max = max(x, na.rm=TRUE),
+                         na = sum(is.na(x))))
+```
+
+```{r, fig.width=10, fig.high = 10}
+cor_matrix = cor(df)
+heatmap(cor_matrix, scale = 'column')
+```
+- Dendograms at the top and right show hieracrical lustering. Maybe 2/3 big clusteres can be seen. After that not clear pattern
+- Check the CLASS variable (our outcome). It is moderately correlated with some of the variables, and some not.
+
+# Would PCA be relevant
+```{r}
+library(EFAtools)
+N_FACTORS(df, criteria = c('PARALLEL', 'SCREE', 'EKC', 'KGC'), method = 'ML', eigen_type_other = 'PCA' )
+```
+- 11 to 15 factors are suitable. Which is quite large 
+
+
+# distribution of predictors
+
+- boxplots show quite some skewness
+- most of the emails contain words 0 times, some emails contain a lot of them. 
+```{r}
+boxplot(df[,1:(ncol(df)-1)])
+```
+
+```{r, fig.width=15, fig.height=10}
+library(ggplot2)
+library(reshape2)
+df_long <- melt(df)
+ggplot(df_long, aes(x = value)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  facet_wrap(~ variable, scales = "free") +
+  theme_minimal()
+```
+
+- more clearly shown here, in most emails 0 words are used in other emails the words get used more often. 
+- in text data like emails, the majority of words appear infrequently.
+- So: most values are near zero, and a few emails have very high frequencies of certain words.
+- Certain words (e.g. “free”, “money”) appear very often in spam and rarely in normal emails, exaggerating skewness in those features.
+```{r}
+library(dplyr)
+library('paran')
+df_subset = df |>
+  select(-Class)
+
+paran(df_subset, iterations = 5000, graph = T)
+```
+# CHECKING PCA WITH 15 FACTORS
+- not used yet
+```{r}
+library(psych)
+pca_rotated = principal(df_subset, nfactors = 15, rotate = "varimax", scores = TRUE)
+print(pca_rotated, digits = 2, cut = 0.3)
+```
+
+
+# Notes Andre:
+frequencies are percentages ranging from 0 to 100
+
+tree: note variable selection bias:
+Another problem: variable selection bias:
+• A split is chosen among all combinations of splitting variable
+and splitting thresholds
+• Variables with more unique values have more splits to try out
+• With enough splitting values, a variable may be picked just
+out of randomness
+
+
+```{r}
+library(randomForest)
+```
+### split test and train
+```{r}
+set.seed(243948) # age Noah, Carla, Andre
+df = read.csv('spambase.csv', check.names = FALSE)
+idx = sample(1:nrow(df),size = 0.7*nrow(df), replace = F)
+
+train = df[idx,]
+test = df[-idx,]
+
+#convert dependent var to factor:
+train$Class <- as.factor(train$Class)
+test$Class <- as.factor(test$Class)
+
+```
+
+#train random forest
+```{r}
+rf_model <- randomForest(
+  x = train[, setdiff(names(train), "Class")],           # All predictors
+  y = train$Class,            # Target variable (spam or not spam)
+  ntree = 500,                         # Number of trees in the forest
+  mtry = floor(sqrt(ncol(train) - 1)), # Number of predictors to try per split (default: sqrt(p) for classification)
+  importance = TRUE,                   # Compute variable importance
+  keep.forest = TRUE                   # Store the forest for later prediction
+)
+```
+
+```{r}
+# Print model summary
+print(rf_model)
+```
+```{r}
+# Plot OOB error for each class and overall
+plot(rf_model, main = "OOB Error vs. Number of Trees")
+
+# Add legend
+legend("topright",
+       legend = colnames(rf_model$err.rate),
+       col = 1:ncol(rf_model$err.rate),
+       lty = 1,
+       cex = 0.8,
+       title = "Error type")
+
+```
+1 = Error OOB for spam
+0 = Error OOB for non-spam
+
+error in 1 (spam) is higher so more spam is misclassified as nonspam than the other way around (non-spam ending up in the spambox). This is a good thing cause we dont want our good emails to end up in the spam bin. (the other way around is less problematic)
+
+
+```{r}
+# Plot variable importance
+varImpPlot(rf_model, main = "Variable Importance")
+
+```
+Right plot: This measures how much a variable contributes to the purity of the splits (Gini index) across all trees in the forest.
+The more splits a variable creates with high information gain, the higher its score.
+
+This measure is structural: it purely reflects the quality of splits, regardless of the final model accuracy.
+
+
+```{r}
+# Predict on test set
+pred_test <- predict(rf_model, newdata = test[, setdiff(names(test), "Class")])
+# Confusion matrix
+confusion <- table(Predicted = pred_test, Actual = test$Class)
+print(confusion)
+
+```
+807: Non-spam correctly predicted as non-spam → True Negatives (TN)
+
+509: Spam correctly predicted as spam → True Positives (TP)
+
+21: Non-spam incorrectly predicted as spam → False Positives (FP)
+
+44: Spam incorrectly predicted as non-spam → False Negatives (FN)
+
+
+
+
+```{r}
+# Accuracy
+accuracy <- sum(diag(confusion)) / sum(confusion)
+cat("Test Accuracy:", round(accuracy, 4), "\n")
+```
+
+## FP%: 2.54% of nonspam ends up in your spambox
+## FN%: 7.96% of spam ends up in your inbox
+
+# how can we adjust probabilty threshold in order to reduce FP% (and what happens to the FN% in that case?)
+
+```{r}
+# Predict probabilities
+probs <- predict(rf_model, newdata = test[, setdiff(names(test), "Class")], type = "prob")
+true_labels <- test$Class
+
+# Total actual counts per class
+n_0 <- sum(true_labels == "0")  # actual non-spam
+n_1 <- sum(true_labels == "1")  # actual spam
+
+# Initialize vectors
+thresholds <- seq(0.01, 0.99, by = 0.01)
+fp_percent <- numeric(length(thresholds))
+fn_percent <- numeric(length(thresholds))
+
+# Calculate FP% and FN% for each threshold
+for (i in seq_along(thresholds)) {
+  t <- thresholds[i]
+  pred <- ifelse(probs[, "1"] > t, "1", "0")
+  
+  # Confusion matrix
+  cm <- table(factor(pred, levels = c("0", "1")), factor(true_labels, levels = c("0", "1")))
+  
+  # Extract counts safely
+  fp <- ifelse(!is.na(cm["1", "0"]), cm["1", "0"], 0)
+  fn <- ifelse(!is.na(cm["0", "1"]), cm["0", "1"], 0)
+  
+  # Percentages relative to actual class sizes
+  fp_percent[i] <- (fp / n_0) * 100
+  fn_percent[i] <- (fn / n_1) * 100
+}
+
+# Plot
+plot(thresholds, fp_percent, type = "l", col = "red", ylim = c(0, max(fp_percent, fn_percent)),
+     ylab = "Error Rate (%)", xlab = "Threshold", main = "False Positive and False Negative Rates")
+lines(thresholds, fn_percent, col = "blue")
+legend("topright", legend = c("False Positive %", "False Negative %"),
+       col = c("red", "blue"), lty = 1)
+
+```
+
+there is a clear trade off.
+
+
+
+A better optimomu could be achieved to train the model several times with different weights:
+Below is an R script that:
+
+Trains a series of Random Forest models with different classwt settings for class "0".
+
+For each model, determines the lowest achievable FN% with FP% ≤ 1%, via threshold tuning.
+
+Stores the results in a data.frame with the following columns:
+
+classwt_0: the weight of class 0
+
+threshold: the corresponding threshold value
+
+FP_percent: the FP% at that point (always ≤ 1)
+
+FN_percent: the FN% at that point
+
+
+```{r}
+library(randomForest)
+
+# Class weights to try
+weights_0 <- c(1, 2, 3, 4, 5, 7, 10)
+results <- data.frame()
+
+# Loop over each classwt_0 value
+for (w in weights_0) {
+  
+  # Train model with classwt
+  rf_model <- randomForest(
+    x = train[, setdiff(names(train), "Class")],
+    y = train$Class,
+    ntree = 500,
+    mtry = floor(sqrt(ncol(train) - 1)),
+    importance = FALSE,
+    classwt = c("0" = w, "1" = 1)
+  )
+  
+  # Predict probabilities
+  probs <- predict(rf_model, newdata = test[, setdiff(names(test), "Class")], type = "prob")
+  true_labels <- test$Class
+  n_0 <- sum(true_labels == "0")
+  n_1 <- sum(true_labels == "1")
+  
+  # Evaluate over thresholds
+  thresholds <- seq(0.01, 0.99, by = 0.01)
+  fp_percent <- numeric(length(thresholds))
+  fn_percent <- numeric(length(thresholds))
+  
+  for (i in seq_along(thresholds)) {
+    t <- thresholds[i]
+    pred <- ifelse(probs[, "1"] > t, "1", "0")
+    
+    cm <- table(factor(pred, levels = c("0", "1")), factor(true_labels, levels = c("0", "1")))
+    fp <- ifelse(!is.na(cm["1", "0"]), cm["1", "0"], 0)
+    fn <- ifelse(!is.na(cm["0", "1"]), cm["0", "1"], 0)
+    
+    fp_percent[i] <- (fp / n_0) * 100
+    fn_percent[i] <- (fn / n_1) * 100
+  }
+  
+  # Filter for FP% ≤ 1 and get minimum FN%
+  valid_indices <- which(fp_percent <= 1)
+  if (length(valid_indices) > 0) {
+    best_index <- valid_indices[which.min(fn_percent[valid_indices])]
+    results <- rbind(results, data.frame(
+      classwt_0 = w,
+      threshold = thresholds[best_index],
+      FP_percent = fp_percent[best_index],
+      FN_percent = fn_percent[best_index]
+    ))
+  } else {
+    results <- rbind(results, data.frame(
+      classwt_0 = w,
+      threshold = NA,
+      FP_percent = NA,
+      FN_percent = NA
+    ))
+  }
+}
+
+# View result
+print(results)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
